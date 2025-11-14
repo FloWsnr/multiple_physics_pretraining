@@ -94,6 +94,9 @@ class PhysicsDataset(WellDataset):
         y = rearrange(y, "t h w c -> t c h w")
 
         bcs = data["boundary_conditions"]
+        bc_x = bcs[0, 0]
+        bc_y = bcs[1, 1]
+        bcs = torch.tensor([bc_x, bc_y])
 
         return x, y, self.labels, bcs
 
