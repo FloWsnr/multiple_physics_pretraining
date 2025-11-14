@@ -3,6 +3,14 @@ from typing import Any, Optional
 
 import torch
 import torch.nn.functional as F
+from torch.utils.data import (
+    DataLoader,
+    RandomSampler,
+    SequentialSampler,
+)
+from torch.utils.data.distributed import DistributedSampler
+
+
 from einops import rearrange
 
 from the_well.data.datasets import WellDataset
@@ -227,3 +235,74 @@ def get_dataset(
             print(f"Dataset path {ds_path} does not exist. Skipping.")
 
     return SuperDataset(all_ds)
+
+
+def get_dataloader(
+    path: str,
+    num_channels: int,
+    split: str,
+    datasets: list[str],
+    min_stride: int,
+    max_stride: int,
+    seed: int,
+    batch_size: int,
+    num_workers: int,
+    prefetch_factor: int,
+    is_distributed: bool = False,
+    shuffle: bool = True,
+) -> DataLoader:
+    """Get a dataloader for the dataset.
+
+    Parameters
+    ----------
+    data_config : dict
+        Configuration for the datasets.
+    seed : int
+        Seed for the dataset.
+    batch_size : int
+        Batch size.
+    num_workers : int
+        Number of workers.
+    prefetch_factor : int
+        Prefetch factor.
+    split : str
+        Split to load ("train", "val", "test")
+    data_fraction : float
+        Fraction of the dataset to use.
+    is_distributed : bool
+        Whether to use distributed sampling
+    shuffle : bool
+        Whether to shuffle the dataset
+    """
+    super_dataset = get_dataset(
+        path,
+        split,
+        datasets=datasets,
+        num_channels=num_channels,
+        min_stride=min_stride,
+        max_stride=max_stride,
+        use_normalization=True,
+        full_trajectory_mode=False,
+        nan_to_zero=True,
+    )
+
+    if is_distributed:
+        sampler = DistributedSampler(super_dataset, seed=seed, shuffle=shuffle)
+    else:
+        if shuffle:
+            generator = torch.Generator()
+            generator.manual_seed(seed)
+            sampler = RandomSampler(super_dataset, generator=generator)
+        else:
+            sampler = SequentialSampler(super_dataset)
+    dataloader = DataLoader(
+        dataset=super_dataset,
+        batch_size=batch_size,
+        num_workers=num_workers,
+        pin_memory=True,
+        sampler=sampler,
+        prefetch_factor=prefetch_factor,
+        drop_last=True,
+    )
+
+    return dataloader

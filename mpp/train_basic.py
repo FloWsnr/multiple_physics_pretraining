@@ -21,16 +21,10 @@ import gc
 from torchinfo import summary
 from collections import defaultdict
 
-try:
-    from data_utils.datasets import get_data_loader, DSET_NAME_TO_OBJECT
-    from mpp.models.avit import build_avit
-    from mpp.utils import logging_utils
-    from mpp.utils.YParams import YParams
-except:
-    from .data_utils.datasets import get_data_loader, DSET_NAME_TO_OBJECT
-    from .models.avit import build_avit
-    from .utils import logging_utils
-    from .utils.YParams import YParams
+from mpp.data_utils.well_dataset import get_dataloader
+from mpp.models.avit import build_avit
+from mpp.utils import logging_utils
+from mpp.utils.YParams import YParams
 
 
 def add_weight_decay(model, weight_decay=1e-5, inner_lr=1e-3, skip_list=()):
@@ -104,22 +98,36 @@ class Trainer:
             in_rank = self.global_rank
         if self.log_to_screen:
             print(f"Initializing data on rank {self.global_rank}")
-        self.train_data_loader, self.train_dataset, self.train_sampler = (
-            get_data_loader(
-                params,
-                params.train_data_paths,
-                dist.is_initialized(),
-                split="train",
-                rank=in_rank,
-                train_offset=self.params.embedding_offset,
-            )
+        self.train_data_loader = get_dataloader(
+            path=params.data_dir,
+            num_channels=params.n_states,
+            split="train",
+            datasets=params.datasets,
+            min_stride=params.min_stride,
+            max_stride=params.max_stride,
+            seed=params.seed,
+            batch_size=params.batch_size,
+            num_workers=params.num_data_workers,
+            prefetch_factor=2,
+            is_distributed=dist.is_initialized(),
+            shuffle=True,
         )
-        self.valid_data_loader, self.valid_dataset, _ = get_data_loader(
-            params,
-            params.valid_data_paths,
-            dist.is_initialized(),
-            split="val",
-            rank=in_rank,
+        self.train_dataset = self.train_data_loader.dataset
+        self.train_sampler = self.train_data_loader.sampler
+
+        self.valid_data_loader = get_dataloader(
+            path=params.data_dir,
+            num_channels=params.n_states,
+            split="valid",
+            datasets=params.datasets,
+            min_stride=params.min_stride,
+            max_stride=params.max_stride,
+            seed=params.seed,
+            batch_size=params.batch_size,
+            num_workers=params.num_data_workers,
+            prefetch_factor=2,
+            is_distributed=dist.is_initialized(),
+            shuffle=False,
         )
         if dist.is_initialized():
             self.train_sampler.set_epoch(0)

@@ -29,7 +29,7 @@ basic_config: &basic_config
   warmup_steps: 1000 # Warmup when not using DAdapt
   learning_rate: -1 # -1 means use DAdapt
   weight_decay: 1e-3
-  n_states: 12   # Number of state variables across the datasets - Can be larger than real number and things will just go unused
+  n_states: 5   # Number of state variables across the datasets - Can be larger than real number and things will just go unused
   state_names: ['Pressure', 'Vx', 'Vy', 'Density',  'Vx', 'Vy', 'Density', 'Pressure'] # Should be sorted
   dt: 1 # Striding of data - Not currently implemented > 1
   n_steps: 16 # Length of history to include in input
@@ -53,23 +53,32 @@ basic_config: &basic_config
   tie_batches: !!bool False # Force everything in batch to come from one dset
   extended_names: !!bool False # Whether to use extended names - not currently implemented
   embedding_offset: 0  # Use when adding extra finetuning fields
-  train_data_paths: [
-              ['~/PDEBench/2D/shallow-water', 'swe', ''],
-              ['~/PDEBench/2D/NS_incom', 'incompNS', ''],
-              ['~/PDEBench/2D/CFD/2D_Train_Rand', compNS, '128'],
-               ['~/PDEBench/2D/CFD/2D_Train_Rand', compNS, '512'],
-              ['~/PDEBench/2D/CFD/2D_Train_Turb', compNS, ''],
-              ['~/PDEBench/2D/diffusion-reaction', 'diffre2d', ''],
-              ]
-  valid_data_paths: [
-              ['~/PDEBench/2D/shallow-water', 'swe', ''],
-              ['~/PDEBench/2D/NS_incom', 'incompNS', ''],
-              ['~/PDEBench/2D/CFD/2D_Train_Rand', compNS, '128'],
-               ['~/PDEBench/2D/CFD/2D_Train_Rand', compNS, '512'],
-              ['~/PDEBench/2D/CFD/2D_Train_Turb', compNS, ''],
-              ['~/PDEBench/2D/diffusion-reaction', 'diffre2d', ''],
-              ]
-  append_datasets: [] # List of datasets to append to the input/output projections for finetuning
+
+
+
+  data_dir: /home/flwi01/coding/well_datasets
+  datasets:
+    - cylinder_sym_flow_water
+    - cylinder_pipe_flow_water
+    - object_periodic_flow_water
+    - object_sym_flow_water
+    - object_sym_flow_air
+
+    - heated_object_pipe_flow_air
+    - cooled_object_pipe_flow_air
+    - rayleigh_benard_obstacle
+
+    - twophase_flow
+
+    - rayleigh_benard
+    - shear_flow
+    - euler_multi_quadrants_periodicBC
+
+  min_stride: 1 # Minimum temporal stride when sampling data
+  max_stride: 5 # Maximum temporal stride when sampling data
+  seed: 42
+
+append_datasets: [] # List of datasets to append to the input/output projections for finetuning
 
 
 finetune: &finetune
