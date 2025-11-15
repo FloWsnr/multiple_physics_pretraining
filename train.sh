@@ -61,7 +61,7 @@ fi
 ############################# Set paths ##############################################
 ######################################################################################
 
-run_name="test" # name of the folder where you placed the yaml config
+run_name="test01" # name of the folder where you placed the yaml config
 
 python_exec="${BASE_DIR}/mpp/train_basic.py"
 yaml_config="${BASE_DIR}/config/mpp_avit_b_custom.yaml"

@@ -25,6 +25,7 @@ from mpp.data_utils.well_dataset import get_dataloader
 from mpp.models.avit import build_avit
 from mpp.utils import logging_utils
 from mpp.utils.YParams import YParams
+from mpp.loss_fns import RVMSELoss, NMSELoss
 
 
 def add_weight_decay(model, weight_decay=1e-5, inner_lr=1e-3, skip_list=()):
@@ -129,6 +130,7 @@ class Trainer:
             is_distributed=dist.is_initialized(),
             shuffle=False,
         )
+        self.valid_dataset = self.valid_data_loader.dataset
         if dist.is_initialized():
             self.train_sampler.set_epoch(0)
 
@@ -234,7 +236,9 @@ class Trainer:
     def restore_checkpoint(self, checkpoint_path):
         """Load model/opt from path"""
         checkpoint = torch.load(
-            checkpoint_path, map_location="cuda:{}".format(self.local_rank)
+            checkpoint_path,
+            map_location="cuda:{}".format(self.local_rank),
+            weights_only=False,
         )
         if "model_state" in checkpoint:
             model_state = checkpoint["model_state"]
@@ -302,8 +306,6 @@ class Trainer:
             inp, file_index, field_labels, bcs, tar = map(
                 lambda x: x.to(self.device), data
             )
-            dset_type = self.train_dataset.sub_dsets[file_index[0]].type
-            loss_counts[dset_type] += 1
             inp = rearrange(inp, "b t c h w -> t b c h w")
             data_time += time.time() - data_start
             dtime = time.time() - data_start
@@ -311,7 +313,11 @@ class Trainer:
             self.model.require_backward_grad_sync = (
                 1 + batch_idx
             ) % self.params.accum_grad == 0
-            with amp.autocast(self.params.enable_amp, dtype=self.mp_type):
+            with torch.autocast(
+                device_type=self.device.type,
+                dtype=self.mp_type,
+                enabled=self.params.enable_amp,
+            ):
                 model_start = time.time()
                 output = self.model(inp, field_labels, bcs)
                 spatial_dims = tuple(range(output.ndim))[
@@ -334,7 +340,6 @@ class Trainer:
                     logs["train_nrmse"] += (
                         log_nrmse  # ehh, not true nmse, but close enough
                     )
-                    loss_logs[dset_type] += loss.item()
                     logs["train_rmse"] += (
                         residuals.pow(2).mean(spatial_dims).sqrt().mean()
                     )
@@ -375,6 +380,10 @@ class Trainer:
                         )
                     )
                 data_start = time.time()
+
+            if steps >= self.params.epoch_size:
+                break
+
         logs = {k: v / steps for k, v in logs.items()}
         # If distributed, do lots of logging things
         if dist.is_initialized():
@@ -413,139 +422,48 @@ class Trainer:
         else:
             cutoff = 40
         self.single_print("STARTING VALIDATION!!!")
+
+        rvmse_loss = RVMSELoss()
+        nmse_loss = NMSELoss()
+        mse_loss = nn.MSELoss()
+        logs = {}
+
         with torch.inference_mode():
-            # There's something weird going on when i turn this off.
-            with amp.autocast(False, dtype=self.mp_type):
-                field_labels = self.valid_dataset.get_state_names()
-                distinct_dsets = list(
-                    set(
-                        [
-                            dset.title
-                            for dset_group in self.valid_dataset.sub_dsets
-                            for dset in dset_group.get_per_file_dsets()
-                        ]
-                    )
-                )
-                counts = {dset: 0 for dset in distinct_dsets}
-                logs = {}  #
-                # Iterate through all folder specific datasets
-                for subset_group in self.valid_dataset.sub_dsets:
-                    for subset in subset_group.get_per_file_dsets():
-                        dset_type = subset.title
-                        self.single_print("VALIDATING ON", dset_type)
-                        # Create data loader for each
-                        if self.params.use_ddp:
-                            temp_loader = torch.utils.data.DataLoader(
-                                subset,
-                                batch_size=self.params.batch_size,
-                                num_workers=self.params.num_data_workers,
-                                sampler=torch.utils.data.distributed.DistributedSampler(
-                                    subset, drop_last=True
-                                ),
-                            )
-                        else:
-                            # Seed isn't important, just trying to mix up samples from different trajectories
-                            temp_loader = torch.utils.data.DataLoader(
-                                subset,
-                                batch_size=self.params.batch_size,
-                                num_workers=self.params.num_data_workers,
-                                shuffle=True,
-                                generator=torch.Generator().manual_seed(0),
-                                drop_last=True,
-                            )
-                        count = 0
-                        for batch_idx, data in enumerate(temp_loader):
-                            # Only do a few batches of each dataset if not doing full validation
-                            if count > cutoff:
-                                del temp_loader
-                                break
-                            count += 1
-                            counts[dset_type] += 1
-                            inp, bcs, tar = map(lambda x: x.to(self.device), data)
-                            # Labels come from the trainset - useful to configure an extra field for validation sets not included
-                            labels = (
-                                torch.tensor(
-                                    self.train_dataset.subset_dict.get(
-                                        subset.get_name(),
-                                        [-1]
-                                        * len(
-                                            self.valid_dataset.subset_dict[
-                                                subset.get_name()
-                                            ]
-                                        ),
-                                    ),
-                                    device=self.device,
-                                )
-                                .unsqueeze(0)
-                                .expand(tar.shape[0], -1)
-                            )
-                            inp = rearrange(inp, "b t c h w -> t b c h w")
-                            output = self.model(inp, labels, bcs)
-                            # I don't think this is the true metric, but PDE bench averages spatial RMSE over batches (MRMSE?) rather than root after mean
-                            # And we want the comparison to be consistent
-                            spatial_dims = tuple(range(output.ndim))[
-                                2:
-                            ]  # Assume 0, 1, 2 are T, B, C
-                            residuals = output - tar
-                            nmse = (
-                                residuals.pow(2).mean(spatial_dims, keepdim=True)
-                                / (1e-7 + tar.pow(2).mean(spatial_dims, keepdim=True))
-                            ).sqrt()  # .mean()
-                            logs[f"{dset_type}/valid_nrmse"] = (
-                                logs.get(f"{dset_type}/valid_nrmse", 0) + nmse.mean()
-                            )
-                            logs[f"{dset_type}/valid_rmse"] = (
-                                logs.get(f"{dset_type}/valid_mse", 0)
-                                + residuals.pow(2).mean(spatial_dims).sqrt().mean()
-                            )
-                            logs[f"{dset_type}/valid_l1"] = (
-                                logs.get(f"{dset_type}/valid_l1", 0)
-                                + residuals.abs().mean()
-                            )
-
-                            for i, field in enumerate(
-                                self.valid_dataset.subset_dict[subset.type]
-                            ):
-                                field_name = field_labels[field]
-                                logs[f"{dset_type}/{field_name}_valid_nrmse"] = (
-                                    logs.get(f"{dset_type}/{field_name}_valid_nrmse", 0)
-                                    + nmse[:, i].mean()
-                                )
-                                logs[f"{dset_type}/{field_name}_valid_rmse"] = (
-                                    logs.get(f"{dset_type}/{field_name}_valid_rmse", 0)
-                                    + residuals[:, i : i + 1]
-                                    .pow(2)
-                                    .mean(spatial_dims)
-                                    .sqrt()
-                                    .mean()
-                                )
-                                logs[f"{dset_type}/{field_name}_valid_l1"] = (
-                                    logs.get(f"{dset_type}/{field_name}_valid_l1", 0)
-                                    + residuals[:, i].abs().mean()
-                                )
-                        else:
-                            del temp_loader
-
-            self.single_print("DONE VALIDATING - NOW SYNCING")
-            for k, v in logs.items():
-                dset_type = k.split("/")[0]
-                logs[k] = v / counts[dset_type]
-
-            logs["valid_nrmse"] = 0
-            for dset_type in distinct_dsets:
-                logs["valid_nrmse"] += logs[f"{dset_type}/valid_nrmse"] / len(
-                    distinct_dsets
+            count = 0
+            for batch_idx, data in enumerate(self.valid_data_loader):
+                # Only do a few batches of each dataset if not doing full validation
+                if count > cutoff:
+                    break
+                count += 1
+                inp, file_index, field_labels, bcs, tar = map(
+                    lambda x: x.to(self.device), data
                 )
 
-            if dist.is_initialized():
-                for key in sorted(logs.keys()):
-                    dist.all_reduce(
-                        logs[key].detach()
-                    )  # There was a bug with means when I implemented this - dont know if fixed
-                    logs[key] = float(logs[key].item() / dist.get_world_size())
-                    if "rmse" in key:
-                        logs[key] = logs[key]
-            self.single_print("DONE SYNCING - NOW LOGGING")
+                inp = rearrange(inp, "b t c h w -> t b c h w")
+                output = self.model(inp, field_labels, bcs)
+
+                tar = tar.squeeze()
+
+                nsme = nmse_loss(output, tar)
+                mse = mse_loss(output, tar)
+                rvmse = rvmse_loss(output, tar)
+
+                logs["nsme"] = logs.get("nrmse", 0) + nsme
+                logs["rmse"] = logs.get("rmse", 0) + mse.sqrt()
+                logs["rvmse"] = logs.get("rvmse", 0) + rvmse
+                logs["mse"] = logs.get("mse", 0) + mse
+
+        self.single_print("DONE VALIDATING - NOW SYNCING")
+        # Average logs
+        for key in logs.keys():
+            logs[key] = logs[key] / count
+        if dist.is_initialized():
+            for key in sorted(logs.keys()):
+                dist.all_reduce(
+                    logs[key].detach()
+                )  # There was a bug with means when I implemented this - dont know if fixed
+                logs[key] = float(logs[key].item() / dist.get_world_size())
+        self.single_print("DONE SYNCING - NOW LOGGING")
         return logs
 
     def train(self):
@@ -612,7 +530,7 @@ class Trainer:
             if epoch == self.params.max_epochs - 1:
                 valid_logs = self.validate_one_epoch(True)
             else:
-                valid_logs = self.validate_one_epoch()
+                valid_logs = self.validate_one_epoch(True)
 
             post_start = time.time()
             train_logs.update(valid_logs)
@@ -630,9 +548,6 @@ class Trainer:
                     self.save_checkpoint(self.params.checkpoint_path)
                 if epoch % self.params.checkpoint_save_interval == 0:
                     self.save_checkpoint(self.params.checkpoint_path + f"_epoch{epoch}")
-                if valid_logs["valid_nrmse"] <= best_valid_loss:
-                    self.save_checkpoint(self.params.best_checkpoint_path)
-                    best_valid_loss = valid_logs["valid_nrmse"]
 
                 cur_time = time.time()
                 self.single_print(
@@ -644,9 +559,7 @@ class Trainer:
                     )
                 )
                 self.single_print(
-                    "Train loss: {}. Valid loss: {}".format(
-                        train_logs["train_nrmse"], valid_logs["valid_nrmse"]
-                    )
+                    f"Train loss: {train_logs['train_nrmse']}. Valid MSE loss: {valid_logs['mse']}"
                 )
 
 

@@ -3,8 +3,8 @@ basic_config: &basic_config
   log_to_wandb: !!bool True # Use wandb integration
   log_to_screen: !!bool True # Log progress to screen.
   save_checkpoint: !!bool True # Save checkpoints
-  checkpoint_save_interval: 10 # Save every # epochs - also saves "best" according to val loss
-  debug_grad: !!bool True # Compute gradient/step_sizes/ect for debugging
+  checkpoint_save_interval: 1 # Save every # epochs - also saves "best" according to val loss
+  debug_grad: !!bool False # Compute gradient/step_sizes/ect for debugging
   true_time: !!bool False # Debugging setting - sets num workers to zero and activates syncs
   num_data_workers: 6 # Generally pulling 8 cpu per process, so using 6 for DL - not sure if best ratio
   enable_amp: !!bool False # Use automatic mixed precision - blows up with low variance fields right now
@@ -19,20 +19,17 @@ basic_config: &basic_config
   entity: 'wsnr-florian'
   # Training settings
   drop_path: 0.1
-  batch_size: 1
   max_epochs: 500
   scheduler_epochs: -1
-  epoch_size: 2000 # Artificial epoch size
+  epoch_size: 20 # Artificial epoch size
   rescale_gradients: !!bool False # Activate hook that scales block gradients to norm 1
   optimizer: 'adan' # adam, adan, whatever else i end up adding - adan did better on HP sweep
   scheduler: 'cosine' # Only cosine implemented
   warmup_steps: 1000 # Warmup when not using DAdapt
   learning_rate: -1 # -1 means use DAdapt
   weight_decay: 1e-3
-  n_states: 5   # Number of state variables across the datasets - Can be larger than real number and things will just go unused
-  state_names: ['Pressure', 'Vx', 'Vy', 'Density',  'Vx', 'Vy', 'Density', 'Pressure'] # Should be sorted
+  state_names: ['Pressure', 'Vx', 'Vy', 'Density'] # Should be sorted
   dt: 1 # Striding of data - Not currently implemented > 1
-  n_steps: 16 # Length of history to include in input
   enforce_max_steps: !!bool False # If false and n_steps > dataset steps, use dataset steps. Otherwise, raise Exception.
   accum_grad: 5  # Real batch size is accum * batch_size, real steps/"epoch" is epoch_size / accum
   # Model settings
@@ -41,9 +38,22 @@ basic_config: &basic_config
   time_type: 'attention' # Conditional on block type
   space_type: 'axial_attention' # Conditional on block type
   tie_fields: !!bool False # Whether to use 1 embedding per field per data
-  embed_dim: 768 # Dimension of internal representation - 192/384/768/1024 for Ti/S/B/L
-  num_heads: 12 # Number of heads for attention - 3/6/12/16 for Ti/S/B/L
+
+
+  # Big
+  # embed_dim: 768 # Dimension of internal representation - 192/384/768/1024 for Ti/S/B/L
+  # num_heads: 12 # Number of heads for attention - 3/6/12/16 for Ti/S/B/L
+  # processor_blocks: 12 # Number of transformer blocks in the backbone - 12/12/12/24 for Ti/S/B/L
+  batch_size: 2
+  n_steps: 4 # Length of history to include in input
+
+  # Tiny
+  embed_dim: 192 # Dimension of internal representation - 192/384/768/1024 for Ti/S/B/L
+  num_heads: 3 # Number of heads for attention - 3/6/12/16 for Ti/S/B/L
   processor_blocks: 12 # Number of transformer blocks in the backbone - 12/12/12/24 for Ti/S/B/L
+
+
+
   patch_size: [16, 16] # Actually currently hardcoded at 16
   bias_type: 'rel'  # Options rel, continuous, none
   # Data settings
@@ -57,25 +67,28 @@ basic_config: &basic_config
 
 
   data_dir: /home/flwi01/coding/well_datasets
+  n_states: 4   # Number of state variables across the datasets - Can be larger than real number and things will just go unused
   datasets:
-    - cylinder_sym_flow_water
-    - cylinder_pipe_flow_water
-    - object_periodic_flow_water
-    - object_sym_flow_water
-    - object_sym_flow_air
+    # - cylinder_sym_flow_water
+    # - cylinder_pipe_flow_water
+    # - object_periodic_flow_water
+    # - object_sym_flow_water
+    # - object_sym_flow_air
 
-    - heated_object_pipe_flow_air
-    - cooled_object_pipe_flow_air
-    - rayleigh_benard_obstacle
+    # - heated_object_pipe_flow_air
+    # - cooled_object_pipe_flow_air
+    # - rayleigh_benard_obstacle
 
-    - twophase_flow
+    # - twophase_flow
 
-    - rayleigh_benard
-    - shear_flow
-    - euler_multi_quadrants_periodicBC
+    # - rayleigh_benard
+    # - shear_flow
+    # - euler_multi_quadrants_periodicBC
+
+    - turbulent_radiative_layer_2D
 
   min_stride: 1 # Minimum temporal stride when sampling data
-  max_stride: 5 # Maximum temporal stride when sampling data
+  max_stride: 8 # Maximum temporal stride when sampling data
   seed: 42
 
 append_datasets: [] # List of datasets to append to the input/output projections for finetuning
