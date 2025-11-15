@@ -335,6 +335,7 @@ class Trainer:
                 forward_time = forward_end - model_start
                 # Logging
                 with torch.no_grad():
+                    tar = tar.squeeze()
                     logs["train_l1"] += F.l1_loss(output, tar)
                     log_nrmse = raw_loss.sqrt().mean()
                     logs["train_nrmse"] += (
@@ -453,6 +454,11 @@ class Trainer:
                 logs["rvmse"] = logs.get("rvmse", 0) + rvmse
                 logs["mse"] = logs.get("mse", 0) + mse
 
+                if count % 100 == 0:
+                    self.single_print(
+                        f"Validation batch {batch_idx}. NRMSE: {nsme.item()}. RMSE: {mse.sqrt().item()}. RVMSE: {rvmse.item()}"
+                    )
+
         self.single_print("DONE VALIDATING - NOW SYNCING")
         # Average logs
         for key in logs.keys():
@@ -566,6 +572,8 @@ class Trainer:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--run_name", default="00", type=str)
+    parser.add_argument("--data_dir", type=str)
+    parser.add_argument("--results_dir", type=str)
     parser.add_argument(
         "--use_ddp", action="store_true", help="Use distributed data parallel"
     )
@@ -580,7 +588,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
     params = YParams(os.path.abspath(args.yaml_config), args.config)
     params.use_ddp = args.use_ddp
-    # Set up distributed training
+    params["data_dir"] = args.data_dir
+    params["exp_dir"] = args.results_dir
     local_rank = int(os.environ.get("LOCAL_RANK", 0))
     global_rank = int(os.environ.get("RANK", 0))
     world_size = int(os.environ.get("WORLD_SIZE", 1))

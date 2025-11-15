@@ -1,40 +1,29 @@
-#!/bin/bash
+#!/usr/bin/bash
 
 ### Task name
-#SBATCH --account=sds_baek_energetic
-
-### Job name
-#SBATCH --job-name=train
+#SBATCH --account=rwth1802
+#SBATCH --job-name=train_mpp
 
 ### Output file
-#SBATCH --output=results/00_slrm_logs/train_%j.out
+#SBATCH --output=results/slrm_logs/train_mpp_%j.out
 
-### Number of nodes
+### Start a parallel job for a distributed-memory system on several nodes
 #SBATCH --nodes=1
 
 ### How many CPU cores to use
-#SBATCH --ntasks-per-node=70
-
-### How much memory in total (MB)
-#SBATCH --mem=300G
+#SBATCH --cpus-per-task=48
+##SBATCH --exclusive
 
 ### Mail notification configuration
 #SBATCH --mail-type=ALL
-#SBATCH --mail-user=zsa8rk@virginia.edu
+#SBATCH --mail-user=florian.wiesner@avt.rwth-aachen.de
 
 ### Maximum runtime per task
-#SBATCH --time=24:00:00
+#SBATCH --time=01:00:00
 
-### set number of GPUs per task (v100, a100, h200)
-#SBATCH --gres=gpu:a100:1
-#SBATCH --constraint=a100_80gb
+### set number of GPUs per task
+#SBATCH --gres=gpu:2
 
-
-### Partition
-#SBATCH --partition=gpu
-
-### create time series, i.e. 100 jobs one after another. Each runs for 24 hours
-##SBATCH --array=1-10%1
 
 
 #####################################################################################
@@ -53,7 +42,7 @@ conda activate gphyt
 
 run_name="test01" # name of the folder where you placed the yaml config
 base_dir="/hpcwork/rwth1802/coding/multiple_physics_pretraining"
-data_dir="/hpcwork/rwth1802/datasets/mpp_datasets/rwth_mpp_dataset_v1"
+data_dir="/hpcwork/rwth1802/coding/General-Physics-Transformer/data/datasets"
 results_dir="${base_dir}/results"
 
 python_exec="${base_dir}/mpp/train_basic.py"
@@ -61,7 +50,7 @@ yaml_config="${base_dir}/config/mpp_avit_b_custom.yaml"
 config="basic_config"
 
 nnodes=1
-ngpus_per_node=1
+ngpus_per_node=2
 export OMP_NUM_THREADS=1
 
 
@@ -72,7 +61,7 @@ echo "--------------------------------"
 echo "Starting training..."
 echo "--------------------------------"
 
-exec_args="--run_name $run_name --config $config --yaml_config  $yaml_config --results_dir $results_dir --data_dir $data_dir --use_ddp"
+exec_args="--run_name $run_name --config $config --yaml_config $yaml_config --results_dir $results_dir --data_dir $data_dir --use_ddp"
 
 # Capture Python output and errors in a variable and run the script
 torchrun --standalone --nproc_per_node=$ngpus_per_node $python_exec $exec_args

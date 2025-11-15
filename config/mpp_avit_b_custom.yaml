@@ -10,7 +10,7 @@ basic_config: &basic_config
   enable_amp: !!bool False # Use automatic mixed precision - blows up with low variance fields right now
   compile: !!bool False # Compile model - Does not currently work
   gradient_checkpointing: !!bool False # Whether to use gradient checkpointing - Slow, but lower memory
-  exp_dir: '/home/flwi01/coding/multiple_physics_pretraining/results' # Output path
+  exp_dir: 'results' # Output path
   log_interval: 1 # How often to log - Don't think this is actually implemented
   pretrained: !!bool False # Whether to load a pretrained model
   # wandb settings
@@ -28,7 +28,7 @@ basic_config: &basic_config
   warmup_steps: 1000 # Warmup when not using DAdapt
   learning_rate: -1 # -1 means use DAdapt
   weight_decay: 1e-3
-  state_names: ['Pressure', 'Vx', 'Vy', 'Density'] # Should be sorted
+  state_names: ['Pressure', 'Density', 'Temperature', 'Vx', 'Vy', ] # Should be sorted
   dt: 1 # Striding of data - Not currently implemented > 1
   enforce_max_steps: !!bool False # If false and n_steps > dataset steps, use dataset steps. Otherwise, raise Exception.
   accum_grad: 5  # Real batch size is accum * batch_size, real steps/"epoch" is epoch_size / accum
@@ -41,16 +41,16 @@ basic_config: &basic_config
 
 
   # Big
-  # embed_dim: 768 # Dimension of internal representation - 192/384/768/1024 for Ti/S/B/L
-  # num_heads: 12 # Number of heads for attention - 3/6/12/16 for Ti/S/B/L
-  # processor_blocks: 12 # Number of transformer blocks in the backbone - 12/12/12/24 for Ti/S/B/L
-  batch_size: 2
+  embed_dim: 768 # Dimension of internal representation - 192/384/768/1024 for Ti/S/B/L
+  num_heads: 12 # Number of heads for attention - 3/6/12/16 for Ti/S/B/L
+  processor_blocks: 12 # Number of transformer blocks in the backbone - 12/12/12/24 for Ti/S/B/L
+  batch_size: 2 # total across all gpus
   n_steps: 4 # Length of history to include in input
 
   # Tiny
-  embed_dim: 192 # Dimension of internal representation - 192/384/768/1024 for Ti/S/B/L
-  num_heads: 3 # Number of heads for attention - 3/6/12/16 for Ti/S/B/L
-  processor_blocks: 12 # Number of transformer blocks in the backbone - 12/12/12/24 for Ti/S/B/L
+  # embed_dim: 192 # Dimension of internal representation - 192/384/768/1024 for Ti/S/B/L
+  # num_heads: 3 # Number of heads for attention - 3/6/12/16 for Ti/S/B/L
+  # processor_blocks: 12 # Number of transformer blocks in the backbone - 12/12/12/24 for Ti/S/B/L
 
 
 
@@ -66,26 +66,26 @@ basic_config: &basic_config
 
 
 
-  data_dir: /home/flwi01/coding/well_datasets
-  n_states: 4   # Number of state variables across the datasets - Can be larger than real number and things will just go unused
+  data_dir: data
+  n_states: 5   # Number of state variables across the datasets - Can be larger than real number and things will just go unused
   datasets:
-    # - cylinder_sym_flow_water
-    # - cylinder_pipe_flow_water
-    # - object_periodic_flow_water
-    # - object_sym_flow_water
-    # - object_sym_flow_air
+    - cylinder_sym_flow_water
+    - cylinder_pipe_flow_water
+    - object_periodic_flow_water
+    - object_sym_flow_water
+    - object_sym_flow_air
 
-    # - heated_object_pipe_flow_air
-    # - cooled_object_pipe_flow_air
-    # - rayleigh_benard_obstacle
+    - heated_object_pipe_flow_air
+    - cooled_object_pipe_flow_air
+    - rayleigh_benard_obstacle
 
-    # - twophase_flow
+    - twophase_flow
 
-    # - rayleigh_benard
-    # - shear_flow
-    # - euler_multi_quadrants_periodicBC
+    - rayleigh_benard
+    - shear_flow
+    - euler_multi_quadrants_periodicBC
 
-    - turbulent_radiative_layer_2D
+    # - turbulent_radiative_layer_2D
 
   min_stride: 1 # Minimum temporal stride when sampling data
   max_stride: 8 # Maximum temporal stride when sampling data

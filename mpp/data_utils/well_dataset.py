@@ -68,7 +68,7 @@ class PhysicsDataset(WellDataset):
 
         super().__init__(
             path=str(data_dir),
-            normalization_path=str(data_dir.parents[1] / "stats.yaml"),
+            normalization_path=str(data_dir.parents[0] / "stats.yaml"),
             n_steps_input=T_in,
             n_steps_output=T_out,
             use_normalization=use_normalization,
