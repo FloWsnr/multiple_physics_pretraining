@@ -11,18 +11,18 @@
 #SBATCH --nodes=1
 
 ### How many CPU cores to use
-#SBATCH --cpus-per-task=48
-##SBATCH --exclusive
+#SBATCH --cpus-per-task=96
+#SBATCH --exclusive
 
 ### Mail notification configuration
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=florian.wiesner@avt.rwth-aachen.de
 
 ### Maximum runtime per task
-#SBATCH --time=01:00:00
+#SBATCH --time=24:00:00
 
 ### set number of GPUs per task
-#SBATCH --gres=gpu:2
+#SBATCH --gres=gpu:4
 
 
 
@@ -40,7 +40,7 @@ conda activate gphyt
 ############################# Set paths ##############################################
 ######################################################################################
 
-run_name="mpp_01" # name of the folder where you placed the yaml config
+run_name="mpp_02" # name of the folder where you placed the yaml config
 base_dir="/hpcwork/rwth1802/coding/multiple_physics_pretraining"
 data_dir="/hpcwork/rwth1802/coding/General-Physics-Transformer/data/datasets"
 results_dir="${base_dir}/results"
@@ -50,8 +50,8 @@ yaml_config="${base_dir}/config/mpp_avit_b_custom.yaml"
 config="basic_config"
 
 nnodes=1
-ngpus_per_node=2
-export OMP_NUM_THREADS=1
+ngpus_per_node=4
+export OMP_NUM_THREADS=4
 
 
 #####################################################################################
