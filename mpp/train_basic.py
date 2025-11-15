@@ -290,22 +290,17 @@ class Trainer:
         tr_time = 0
         data_time = 0
         data_start = time.time()
-        self.model.train()
-        logs = {
-            "train_rmse": torch.zeros(1).to(self.device),
-            "train_nrmse": torch.zeros(1).to(self.device),
-            "train_l1": torch.zeros(1).to(self.device),
-        }
         steps = 0
-        last_grads = [torch.zeros_like(p) for p in self.model.parameters()]
-        grad_logs = defaultdict(lambda: torch.zeros(1, device=self.device))
-        grad_counts = defaultdict(lambda: torch.zeros(1, device=self.device))
-        loss_logs = defaultdict(lambda: torch.zeros(1, device=self.device))
-        loss_counts = defaultdict(lambda: torch.zeros(1, device=self.device))
         self.single_print(
             "train_loader_size", len(self.train_data_loader), len(self.train_dataset)
         )
+
+        nmse_loss = NMSELoss()
+        rvmse_loss = RVMSELoss()
+        mse_loss = nn.MSELoss()
+
         for batch_idx, data in enumerate(self.train_data_loader):
+            logs = {}
             steps += 1
             inp, file_index, field_labels, bcs, tar = map(
                 lambda x: x.to(self.device), data
@@ -337,17 +332,15 @@ class Trainer:
                 loss = raw_loss.mean() / self.params.accum_grad
                 forward_end = time.time()
                 forward_time = forward_end - model_start
+
                 # Logging
                 with torch.no_grad():
                     tar = tar.squeeze()
-                    logs["train_l1"] += F.l1_loss(output, tar)
-                    log_nrmse = raw_loss.sqrt().mean()
-                    logs["train_nrmse"] += (
-                        log_nrmse  # ehh, not true nmse, but close enough
-                    )
-                    logs["train_rmse"] += (
-                        residuals.pow(2).mean(spatial_dims).sqrt().mean()
-                    )
+                    logs["train/l1"] = F.l1_loss(output, tar)
+                    logs["train/nmse"] = nmse_loss(output, tar)
+                    logs["train/rvmse"] = rvmse_loss(output, tar)
+                    logs["train/mse"] = mse_loss(output, tar)
+
                 # Scaler is no op when not using AMP
                 self.gscaler.scale(loss).backward()
                 backward_end = time.time()
@@ -386,33 +379,18 @@ class Trainer:
                     )
                 data_start = time.time()
 
+            # If distributed, do lots of logging things
+            if dist.is_initialized():
+                for key in sorted(logs.keys()):
+                    dist.all_reduce(logs[key].detach())
+                    logs[key] = float(logs[key].item() / dist.get_world_size())
+
+            logs["batches"] = steps
+
+            if self.params.log_to_wandb:
+                wandb.log(logs)
             if steps >= self.params.epoch_size:
                 break
-
-        logs = {k: v / steps for k, v in logs.items()}
-        # If distributed, do lots of logging things
-        if dist.is_initialized():
-            for key in sorted(logs.keys()):
-                dist.all_reduce(logs[key].detach())
-                logs[key] = float(logs[key] / dist.get_world_size())
-            for key in sorted(loss_logs.keys()):
-                dist.all_reduce(loss_logs[key].detach())
-            for key in sorted(grad_logs.keys()):
-                dist.all_reduce(grad_logs[key].detach())
-            for key in sorted(loss_counts.keys()):
-                dist.all_reduce(loss_counts[key].detach())
-            for key in sorted(grad_counts.keys()):
-                dist.all_reduce(grad_counts[key].detach())
-
-        for key in loss_logs.keys():
-            logs[f"{key}/train_nrmse"] = loss_logs[key] / loss_counts[key]
-
-        self.iters += steps
-        if self.global_rank == 0:
-            logs["iters"] = self.iters
-        self.single_print("all reduces executed!")
-
-        return tr_time, data_time, logs
 
     def validate_one_epoch(self, full=False):
         """
@@ -449,18 +427,18 @@ class Trainer:
 
                 tar = tar.squeeze()
 
-                nsme = nmse_loss(output, tar)
+                nmse = nmse_loss(output, tar)
                 mse = mse_loss(output, tar)
                 rvmse = rvmse_loss(output, tar)
 
-                logs["nsme"] = logs.get("nrmse", 0) + nsme
-                logs["rmse"] = logs.get("rmse", 0) + mse.sqrt()
-                logs["rvmse"] = logs.get("rvmse", 0) + rvmse
-                logs["mse"] = logs.get("mse", 0) + mse
+                logs["valid/nmse"] = logs.get("valid/nmse", 0) + nmse
+                logs["valid/rmse"] = logs.get("valid/rmse", 0) + mse.sqrt()
+                logs["valid/rvmse"] = logs.get("valid/rvmse", 0) + rvmse
+                logs["valid/mse"] = logs.get("valid/mse", 0) + mse
 
                 if count % 100 == 0:
                     self.single_print(
-                        f"Validation batch {batch_idx}. NRMSE: {nsme.item()}. RMSE: {mse.sqrt().item()}. RVMSE: {rvmse.item()}"
+                        f"Validation batch {batch_idx}. NMSE: {nmse.item()}. MSE: {mse.sqrt().item()}. RVMSE: {rvmse.item()}"
                     )
 
         self.single_print("DONE VALIDATING - NOW SYNCING")
@@ -533,7 +511,7 @@ class Trainer:
             start = time.time()
 
             # with torch.autograd.detect_anomaly(check_nan=True):
-            tr_time, data_time, train_logs = self.train_one_epoch()
+            self.train_one_epoch()
 
             valid_start = time.time()
             # Only do full validation set on last epoch - don't waste time
@@ -543,13 +521,11 @@ class Trainer:
                 valid_logs = self.validate_one_epoch(False)
 
             post_start = time.time()
-            train_logs.update(valid_logs)
-            train_logs["time/train_time"] = valid_start - start
-            train_logs["time/train_data_time"] = data_time
-            train_logs["time/train_compute_time"] = tr_time
-            train_logs["time/valid_time"] = post_start - valid_start
+            time_logs = {}
+            time_logs["time/train_time"] = valid_start - start
+            time_logs["time/valid_time"] = post_start - valid_start
             if self.params.log_to_wandb:
-                wandb.log(train_logs)
+                wandb.log(time_logs)
             gc.collect()
             torch.cuda.empty_cache()
 
@@ -568,9 +544,7 @@ class Trainer:
                         epoch + 1, time.time() - start
                     )
                 )
-                self.single_print(
-                    f"Train loss: {train_logs['train_nrmse']}. Valid MSE loss: {valid_logs['mse']}"
-                )
+                self.single_print(f"Valid MSE loss: {valid_logs['mse']}")
 
 
 if __name__ == "__main__":
