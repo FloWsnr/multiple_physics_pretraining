@@ -106,6 +106,8 @@ class Trainer:
             datasets=params.datasets,
             min_stride=params.min_stride,
             max_stride=params.max_stride,
+            T_in=params.n_steps,
+            T_out=1,
             seed=params.seed,
             batch_size=params.batch_size,
             num_workers=params.num_data_workers,
@@ -123,6 +125,8 @@ class Trainer:
             datasets=params.datasets,
             min_stride=params.min_stride,
             max_stride=params.max_stride,
+            T_in=params.n_steps,
+            T_out=1,
             seed=params.seed,
             batch_size=params.batch_size,
             num_workers=params.num_data_workers,
@@ -421,7 +425,7 @@ class Trainer:
         if full:
             cutoff = 999999999999
         else:
-            cutoff = 40
+            cutoff = 1000
         self.single_print("STARTING VALIDATION!!!")
 
         rvmse_loss = RVMSELoss()
@@ -536,7 +540,7 @@ class Trainer:
             if epoch == self.params.max_epochs - 1:
                 valid_logs = self.validate_one_epoch(True)
             else:
-                valid_logs = self.validate_one_epoch(True)
+                valid_logs = self.validate_one_epoch(False)
 
             post_start = time.time()
             train_logs.update(valid_logs)

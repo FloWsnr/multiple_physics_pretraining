@@ -40,7 +40,7 @@ conda activate gphyt
 ############################# Set paths ##############################################
 ######################################################################################
 
-run_name="test01" # name of the folder where you placed the yaml config
+run_name="mpp_01" # name of the folder where you placed the yaml config
 base_dir="/hpcwork/rwth1802/coding/multiple_physics_pretraining"
 data_dir="/hpcwork/rwth1802/coding/General-Physics-Transformer/data/datasets"
 results_dir="${base_dir}/results"
