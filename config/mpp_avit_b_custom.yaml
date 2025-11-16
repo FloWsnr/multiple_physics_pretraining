@@ -21,8 +21,6 @@ basic_config: &basic_config
   rescale_gradients: !!bool False # Activate hook that scales block gradients to norm 1
   optimizer: 'adam' # adam, adan, whatever else i end up adding - adan did better on HP sweep
   scheduler: 'cosine' # Only cosine implemented
-  warmup_steps: 10 # Warmup when not using DAdapt
-  learning_rate: 0.0001 # -1 means use DAdapt
   weight_decay: 1e-3
   state_names: ['Pressure', 'Density', 'Temperature', 'Vx', 'Vy', ] # Should be sorted
   dt: 1 # Striding of data - Not currently implemented > 1
@@ -36,21 +34,23 @@ basic_config: &basic_config
   tie_fields: !!bool False # Whether to use 1 embedding per field per data
 
 
-  log_interval: 100 # How often to log - Don't think this is actually implemented
+  warmup_steps: 1000 # Warmup when not using DAdapt
+  learning_rate: 0.0001 # -1 means use DAdapt
+  log_interval: 100 # How often to log
   max_epochs: 100
-  epoch_size: 1000 # Artificial epoch size
-  num_data_workers: 6 # Generally pulling 8 cpu per process, so using 6 for DL - not sure if best ratio
-  batch_size: 16 # total across all gpus
+  epoch_size: 10000 # Artificial epoch size
+  num_data_workers: 23 #
+  batch_size: 192 # total across all gpus (4*48)
   n_steps: 4 # Length of history to include in input
   # Big
-  # embed_dim: 768 # Dimension of internal representation - 192/384/768/1024 for Ti/S/B/L
-  # num_heads: 12 # Number of heads for attention - 3/6/12/16 for Ti/S/B/L
-  # processor_blocks: 12 # Number of transformer blocks in the backbone - 12/12/12/24 for Ti/S/B/L
+  embed_dim: 768 # Dimension of internal representation - 192/384/768/1024 for Ti/S/B/L
+  num_heads: 12 # Number of heads for attention - 3/6/12/16 for Ti/S/B/L
+  processor_blocks: 12 # Number of transformer blocks in the backbone - 12/12/12/24 for Ti/S/B/L
 
   # Tiny
-  embed_dim: 192 # Dimension of internal representation - 192/384/768/1024 for Ti/S/B/L
-  num_heads: 3 # Number of heads for attention - 3/6/12/16 for Ti/S/B/L
-  processor_blocks: 12 # Number of transformer blocks in the backbone - 12/12/12/24 for Ti/S/B/L
+  # embed_dim: 192 # Dimension of internal representation - 192/384/768/1024 for Ti/S/B/L
+  # num_heads: 3 # Number of heads for attention - 3/6/12/16 for Ti/S/B/L
+  # processor_blocks: 12 # Number of transformer blocks in the backbone - 12/12/12/24 for Ti/S/B/L
 
 
 
@@ -67,25 +67,25 @@ basic_config: &basic_config
 
 
   data_dir: data
-  n_states: 4   # Number of state variables across the datasets - Can be larger than real number and things will just go unused
+  n_states: 5   # Number of state variables across the datasets - Can be larger than real number and things will just go unused
   datasets:
-    # - cylinder_sym_flow_water
-    # - cylinder_pipe_flow_water
-    # - object_periodic_flow_water
-    # - object_sym_flow_water
-    # - object_sym_flow_air
+    - cylinder_sym_flow_water
+    - cylinder_pipe_flow_water
+    - object_periodic_flow_water
+    - object_sym_flow_water
+    - object_sym_flow_air
 
-    # - heated_object_pipe_flow_air
-    # - cooled_object_pipe_flow_air
-    # - rayleigh_benard_obstacle
+    - heated_object_pipe_flow_air
+    - cooled_object_pipe_flow_air
+    - rayleigh_benard_obstacle
 
-    # - twophase_flow
+    - twophase_flow
 
-    # - rayleigh_benard
-    # - shear_flow
-    # - euler_multi_quadrants_periodicBC
+    - rayleigh_benard
+    - shear_flow
+    - euler_multi_quadrants_periodicBC
 
-    - turbulent_radiative_layer_2D
+    # - turbulent_radiative_layer_2D
 
   min_stride: 1 # Minimum temporal stride when sampling data
   max_stride: 8 # Maximum temporal stride when sampling data
