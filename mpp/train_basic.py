@@ -355,9 +355,8 @@ class Trainer:
                     if self.scheduler is not None:
                         self.scheduler.step()
                 tr_time += time.time() - model_start
+                lr = self.optimizer.param_groups[0]["lr"]
                 if self.log_to_screen and (batch_idx % self.params.log_interval == 0):
-                    lr = self.optimizer.param_groups[0]["lr"]
-                    logs["lr"] = lr
                     print(
                         f"Epoch: {self.epoch}, Batch: {batch_idx}, L1 Loss: {logs['train/l1'].item()}, NMSE Loss: {logs['train/nmse'].item()}, RVMSE Loss: {logs['train/rvmse'].item()}, MSE Loss: {logs['train/mse'].item()}, LR: {lr}, "
                     )
@@ -370,6 +369,7 @@ class Trainer:
                     logs[key] = float(logs[key].item() / dist.get_world_size())
 
             logs["batches"] = steps
+            logs["lr"] = lr
 
             if self.params.log_to_wandb:
                 wandb.log(logs)
