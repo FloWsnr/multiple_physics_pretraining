@@ -12,11 +12,11 @@ except:
     from .mixed_modules import build_spacetime_block, SpaceTimeBlock
 
 def build_avit(params):
-    """ Builds model from parameter file. 
+    """ Builds model from parameter file.
 
     General recipe is to build the spatial and temporal modules separately and then
-    combine them in a model. Eventually the "stem" and "destem" should 
-    also be parameterized. 
+    combine them in a model. Eventually the "stem" and "destem" should
+    also be parameterized.
     """
     space_time_block = build_spacetime_block(params)
     model = AViT(patch_size=params.patch_size,
@@ -28,14 +28,14 @@ def build_avit(params):
 
 class AViT(nn.Module):
     """
-    Naive model that interweaves spatial and temporal attention blocks. Temporal attention 
-    acts only on the time dimension. 
+    Naive model that interweaves spatial and temporal attention blocks. Temporal attention
+    acts only on the time dimension.
 
     Args:
         patch_size (tuple): Size of the input patch
         embed_dim (int): Dimension of the embedding
         processor_blocks (int): Number of blocks (consisting of spatial mixing - temporal attention)
-        n_states (int): Number of input state variables.  
+        n_states (int): Number of input state variables.
     """
     def __init__(self, patch_size=(16, 16), embed_dim=768, processor_blocks=8, n_states=6,
                  override_block=None, drop_path=.2):
@@ -82,7 +82,7 @@ class AViT(nn.Module):
             param.requires_grad = True
         self.debed.out_kernel.requires_grad = True
         self.debed.out_bias.requires_grad = True
-    
+
     def freeze_processor(self):
         # First just turn grad off for everything
         for param in self.parameters():
@@ -113,7 +113,7 @@ class AViT(nn.Module):
 
         # Encode
         x = rearrange(x, 't b h w c -> (t b) c h w')
-        x = self.embed(x)            
+        x = self.embed(x)
         x = rearrange(x, '(t b) c h w -> t b c h w', t=T)
 
         # Process
@@ -126,7 +126,7 @@ class AViT(nn.Module):
         x = self.debed(x, state_labels[0])
         x = rearrange(x, '(t b) c h w -> t b c h w', t=T)
 
-        # Denormalize 
+        # Denormalize
         x = x * data_std + data_mean # All state labels in the batch should be identical
         return x[-1] # Just return last step - now just predict delta.
 
@@ -150,5 +150,3 @@ if __name__ == '__main__':
     labels = [0, 1]
     y = model(x, labels)
     print('yshape', y.shape)
-
-

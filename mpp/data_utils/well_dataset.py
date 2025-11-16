@@ -256,6 +256,7 @@ def get_dataloader(
     prefetch_factor: int,
     is_distributed: bool = False,
     shuffle: bool = True,
+    use_normalization: bool = False,
 ) -> DataLoader:
     """Get a dataloader for the dataset.
 
@@ -289,7 +290,7 @@ def get_dataloader(
         max_stride=max_stride,
         T_in=T_in,
         T_out=T_out,
-        use_normalization=True,
+        use_normalization=use_normalization,
         full_trajectory_mode=False,
         nan_to_zero=True,
     )

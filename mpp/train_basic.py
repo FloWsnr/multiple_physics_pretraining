@@ -114,6 +114,7 @@ class Trainer:
             prefetch_factor=2,
             is_distributed=dist.is_initialized(),
             shuffle=True,
+            use_normalization=False,  # Model handles normalization
         )
         self.train_dataset = self.train_data_loader.dataset
         self.train_sampler = self.train_data_loader.sampler
@@ -133,6 +134,7 @@ class Trainer:
             prefetch_factor=2,
             is_distributed=dist.is_initialized(),
             shuffle=False,
+            use_normalization=False,  # Model handles normalization
         )
         self.valid_dataset = self.valid_data_loader.dataset
         if dist.is_initialized():
@@ -168,7 +170,7 @@ class Trainer:
         if params.optimizer == "adam":
             if self.params.learning_rate < 0:
                 self.optimizer = DAdaptAdam(
-                    parameters, lr=1.0, growth_rate=1.05, log_every=100, decouple=True
+                    parameters, lr=1.0, growth_rate=1.05, log_every=1, decouple=True
                 )
             else:
                 self.optimizer = optim.AdamW(parameters, lr=params.learning_rate)
@@ -211,7 +213,7 @@ class Trainer:
                     decay = torch.optim.lr_scheduler.CosineAnnealingLR(
                         self.optimizer,
                         eta_min=params.learning_rate / 100,
-                        T_max=sched_epochs,
+                        T_max=sched_epochs * params.epoch_size - k,
                     )
                     self.scheduler = torch.optim.lr_scheduler.SequentialLR(
                         self.optimizer,
@@ -295,8 +297,8 @@ class Trainer:
             "train_loader_size", len(self.train_data_loader), len(self.train_dataset)
         )
 
-        nmse_loss = NMSELoss()
-        rvmse_loss = RVMSELoss()
+        nmse_loss = NMSELoss(dims=(2, 3))
+        rvmse_loss = RVMSELoss(dims=(2, 3))
         mse_loss = nn.MSELoss()
 
         for batch_idx, data in enumerate(self.train_data_loader):
@@ -306,6 +308,7 @@ class Trainer:
                 lambda x: x.to(self.device), data
             )
             inp = rearrange(inp, "b t c h w -> t b c h w")
+            tar = tar.squeeze(1)  # (b, 1, c, h, w) -> (b, c, h, w)
             data_time += time.time() - data_start
             dtime = time.time() - data_start
 
@@ -319,9 +322,9 @@ class Trainer:
             ):
                 model_start = time.time()
                 output = self.model(inp, field_labels, bcs)
-                spatial_dims = tuple(range(output.ndim))[
-                    2:
-                ]  # Assume 0, 1, 2 are T, B, C
+
+                # Model returns denormalized output, compare to raw target
+                spatial_dims = (2, 3)  # H, W dimensions
                 residuals = output - tar
                 # Differentiate between log and accumulation losses
                 tar_norm = 1e-7 + tar.pow(2).mean(spatial_dims, keepdim=True)
@@ -331,11 +334,9 @@ class Trainer:
                 # Scale loss for accum
                 loss = raw_loss.mean() / self.params.accum_grad
                 forward_end = time.time()
-                forward_time = forward_end - model_start
 
                 # Logging
                 with torch.no_grad():
-                    tar = tar.squeeze()
                     logs["train/l1"] = F.l1_loss(output, tar)
                     logs["train/nmse"] = nmse_loss(output, tar)
                     logs["train/rvmse"] = rvmse_loss(output, tar)
@@ -344,9 +345,7 @@ class Trainer:
                 # Scaler is no op when not using AMP
                 self.gscaler.scale(loss).backward()
                 backward_end = time.time()
-                backward_time = backward_end - forward_end
                 # Only take step once per accumulation cycle
-                optimizer_step = 0
                 if self.model.require_backward_grad_sync:
                     self.gscaler.unscale_(self.optimizer)
                     torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
@@ -355,27 +354,12 @@ class Trainer:
                     self.optimizer.zero_grad(set_to_none=True)
                     if self.scheduler is not None:
                         self.scheduler.step()
-                    optimizer_step = time.time() - backward_end
                 tr_time += time.time() - model_start
-                if (
-                    self.log_to_screen
-                    and batch_idx % self.params.log_interval == 0
-                    and self.global_rank == 0
-                ):
+                if self.log_to_screen and (batch_idx % self.params.log_interval == 0):
+                    lr = self.optimizer.param_groups[0]["lr"]
+                    logs["lr"] = lr
                     print(
-                        f"Epoch {self.epoch} Batch {batch_idx} Train Loss {log_nrmse.item()}"
-                    )
-                if self.log_to_screen:
-                    print(
-                        "Total Times. Batch: {}, Rank: {}, Data Shape: {}, Data time: {}, Forward: {}, Backward: {}, Optimizer: {}".format(
-                            batch_idx,
-                            self.global_rank,
-                            inp.shape,
-                            dtime,
-                            forward_time,
-                            backward_time,
-                            optimizer_step,
-                        )
+                        f"Epoch: {self.epoch}, Batch: {batch_idx}, L1 Loss: {logs['train/l1'].item()}, NMSE Loss: {logs['train/nmse'].item()}, RVMSE Loss: {logs['train/rvmse'].item()}, MSE Loss: {logs['train/mse'].item()}, LR: {lr}, "
                     )
                 data_start = time.time()
 
@@ -423,10 +407,11 @@ class Trainer:
                 )
 
                 inp = rearrange(inp, "b t c h w -> t b c h w")
+                tar = tar.squeeze(1)  # (b, 1, c, h, w) -> (b, c, h, w)
+
                 output = self.model(inp, field_labels, bcs)
 
-                tar = tar.squeeze()
-
+                # Model returns denormalized output, compare to raw target
                 nmse = nmse_loss(output, tar)
                 mse = mse_loss(output, tar)
                 rvmse = rvmse_loss(output, tar)
@@ -526,6 +511,7 @@ class Trainer:
             time_logs["time/valid_time"] = post_start - valid_start
             if self.params.log_to_wandb:
                 wandb.log(time_logs)
+                wandb.log(valid_logs)
             gc.collect()
             torch.cuda.empty_cache()
 
@@ -544,7 +530,7 @@ class Trainer:
                         epoch + 1, time.time() - start
                     )
                 )
-                self.single_print(f"Valid MSE loss: {valid_logs['mse']}")
+                self.single_print(f"Valid MSE loss: {valid_logs['valid/mse']}")
 
 
 if __name__ == "__main__":
