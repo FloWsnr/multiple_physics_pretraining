@@ -1,5 +1,6 @@
 import argparse
 import os
+from pathlib import Path
 import time
 import numpy as np
 import torch
@@ -543,17 +544,12 @@ if __name__ == "__main__":
     )
     parser.add_argument("--yaml_config", default="./config/multi_ds.yaml", type=str)
     parser.add_argument("--config", default="basic_config", type=str)
-    parser.add_argument(
-        "--sweep_id",
-        default=None,
-        type=str,
-        help="sweep config from ./configs/sweeps.yaml",
-    )
     args = parser.parse_args()
-    params = YParams(os.path.abspath(args.yaml_config), args.config)
+    params = YParams(Path(args.yaml_config).absolute(), args.config)
     params.use_ddp = args.use_ddp
     params["data_dir"] = args.data_dir
-    params["exp_dir"] = args.results_dir
+    params["results_dir"] = args.results_dir
+
     local_rank = int(os.environ.get("LOCAL_RANK", 0))
     global_rank = int(os.environ.get("RANK", 0))
     world_size = int(os.environ.get("WORLD_SIZE", 1))
@@ -569,38 +565,22 @@ if __name__ == "__main__":
     # Modify params
     params["batch_size"] = int(params.batch_size // world_size)
     params["startEpoch"] = 0
-    if args.sweep_id:
-        jid = os.environ["SLURM_JOBID"]  # so different sweeps dont resume
-        expDir = os.path.join(
-            params.exp_dir, args.sweep_id, args.config, str(args.run_name), jid
-        )
-    else:
-        expDir = os.path.join(params.exp_dir, args.config, str(args.run_name))
 
-    params["old_exp_dir"] = (
-        expDir  # I dont remember what this was for but not removing it yet
-    )
-    params["experiment_dir"] = os.path.abspath(expDir)
-    params["checkpoint_path"] = os.path.join(expDir, "training_checkpoints/ckpt.tar")
-    params["best_checkpoint_path"] = os.path.join(
-        expDir, "training_checkpoints/best_ckpt.tar"
-    )
-    params["old_checkpoint_path"] = os.path.join(
-        params.old_exp_dir, "training_checkpoints/best_ckpt.tar"
-    )
+    expDir = Path(args.results_dir) / args.config / str(args.run_name)
+
+    params["experiment_dir"] = str(expDir.absolute())
+    params["checkpoint_path"] = str(expDir / "training_checkpoints/ckpt.tar")
 
     # Have rank 0 check for and/or make directory
     if global_rank == 0:
-        if not os.path.isdir(expDir):
-            os.makedirs(expDir)
-            os.makedirs(os.path.join(expDir, "training_checkpoints/"))
-    params["resuming"] = True if os.path.isfile(params.checkpoint_path) else False
+        if not expDir.is_dir():
+            expDir.mkdir(parents=True, exist_ok=True)
+            (expDir / "training_checkpoints").mkdir(parents=True, exist_ok=True)
+
+    params["resuming"] = True if Path(params.checkpoint_path).is_file() else False
 
     # WANDB things
     params["name"] = str(args.run_name)
-    # params['group'] = params['group'] #+ args.config
-    # params['project'] = "pde_bench"
-    # params['entity'] = "flatiron-scipt
 
     params["log_to_wandb"] = (global_rank == 0) and params["log_to_wandb"]
     params["log_to_screen"] = (global_rank == 0) and params["log_to_screen"]
@@ -611,19 +591,9 @@ if __name__ == "__main__":
         yaml = YAML()
         for key, value in params.params.items():
             hparams[str(key)] = str(value)
-        with open(os.path.join(expDir, "hyperparams.yaml"), "w") as hpfile:
+        with open(expDir / "hyperparams.yaml", "w") as hpfile:
             yaml.dump(hparams, hpfile)
-    trainer = Trainer(params, global_rank, local_rank, device, sweep_id=args.sweep_id)
-    if args.sweep_id and trainer.global_rank == 0:
-        print(args.sweep_id, trainer.params.entity, trainer.params.project)
-        wandb.agent(
-            args.sweep_id,
-            function=trainer.train,
-            count=1,
-            entity=trainer.params.entity,
-            project=trainer.params.project,
-        )
-    else:
-        trainer.train()
+    trainer = Trainer(params, global_rank, local_rank, device)
+    trainer.train()
     if params.log_to_screen:
         print("DONE ---- rank %d" % global_rank)
