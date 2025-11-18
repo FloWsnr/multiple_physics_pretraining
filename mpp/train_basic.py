@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import torch.distributed as dist
-import torch.cuda.amp as amp
+from torch.amp.grad_scaler import GradScaler
 from torch.nn.parallel import DistributedDataParallel
 from einops import rearrange
 from ruamel.yaml import YAML
@@ -188,7 +188,7 @@ class Trainer:
             )
         else:
             raise ValueError(f"Optimizer {params.optimizer} not supported")
-        self.gscaler = amp.GradScaler(
+        self.gscaler = GradScaler(
             enabled=(self.mp_type == torch.half and params.enable_amp)
         )
 
@@ -221,6 +221,14 @@ class Trainer:
                         [warmup, decay],
                         [k],
                         last_epoch=(params.epoch_size * self.startEpoch) - 1,
+                    )
+                else:
+                    # We're past warmup, just use the decay scheduler
+                    self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                        self.optimizer,
+                        eta_min=params.learning_rate / 100,
+                        T_max=sched_epochs * params.epoch_size - k,
+                        last_epoch=(params.epoch_size * self.startEpoch) - k - 1,
                     )
         else:
             self.scheduler = None
