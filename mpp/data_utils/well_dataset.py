@@ -13,8 +13,7 @@ from torch.utils.data.distributed import DistributedSampler
 
 from einops import rearrange
 
-from the_well.data.datasets import WellDataset
-from the_well.data.normalization import ZScoreNormalization
+from gphyt.data.well_dataset import WellDataset, ZScoreNormalization
 
 
 class PhysicsDataset(WellDataset):
@@ -90,7 +89,7 @@ class PhysicsDataset(WellDataset):
     def __getitem__(
         self, index
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        data = super().__getitem__(index)  # returns (T, h, w, c)
+        data, _ = super().__getitem__(index)  # returns (T, h, w, c)
         x = data["input_fields"]
         y = data["output_fields"]
 
