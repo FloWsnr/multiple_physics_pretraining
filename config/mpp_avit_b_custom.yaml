@@ -22,7 +22,7 @@ basic_config: &basic_config
   optimizer: 'adam' # adam, adan, whatever else i end up adding - adan did better on HP sweep
   scheduler: 'cosine' # Only cosine implemented
   weight_decay: 1e-3
-  state_names: ['Pressure', 'Density', 'Temperature', 'Vx', 'Vy', ] # Should be sorted
+  state_names: ['Pressure', 'Density', 'Temperature', 'Vx', 'Vy'] # Should be sorted
   dt: 1 # Striding of data - Not currently implemented > 1
   enforce_max_steps: !!bool False # If false and n_steps > dataset steps, use dataset steps. Otherwise, raise Exception.
   accum_grad: 5  # Real batch size is accum * batch_size, real steps/"epoch" is epoch_size / accum

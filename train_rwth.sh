@@ -2,10 +2,10 @@
 
 ### Task name
 #SBATCH --account=rwth1802
-#SBATCH --job-name=train_mpp
+#SBATCH --job-name=train_mpp_04
 
 ### Output file
-#SBATCH --output=results/slrm_logs/train_mpp_%j.out
+#SBATCH --output=results/slrm_logs/train_mpp_04_%j.out
 
 ### Start a parallel job for a distributed-memory system on several nodes
 #SBATCH --nodes=1
@@ -40,7 +40,7 @@ conda activate gphyt
 ############################# Set paths ##############################################
 ######################################################################################
 
-run_name="mpp_03" # name of the folder where you placed the yaml config
+run_name="mpp_04" # name of the folder where you placed the yaml config
 base_dir="/hpcwork/rwth1802/coding/multiple_physics_pretraining"
 data_dir="/hpcwork/rwth1802/coding/General-Physics-Transformer/data/datasets"
 results_dir="${base_dir}/results"
