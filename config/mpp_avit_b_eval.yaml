@@ -4,6 +4,7 @@ num_data_workers: 23 #
 batch_size: 192 # total across all gpus (4*48)
 n_input_steps: 4 # Length of history to include in input
 n_output_steps: 1 # Number of steps to predict
+num_channels: 5
 
 # Big
 embed_dim: 768 # Dimension of internal representation - 192/384/768/1024 for Ti/S/B/L
@@ -36,3 +37,6 @@ datasets:
 min_stride: 1 # Minimum temporal stride when sampling data
 max_stride: 8 # Maximum temporal stride when sampling data
 seed: 42
+
+compile: true
+amp: true

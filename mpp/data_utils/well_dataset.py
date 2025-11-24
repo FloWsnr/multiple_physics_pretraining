@@ -85,9 +85,15 @@ class PhysicsDataset(WellDataset):
         nan_to_zero: bool = True,
         num_channels: int = 5,
     ):
-
         self.config = {
             "data_dir": data_dir,
+            "use_normalization": use_normalization,
+            "T_in": T_in,
+            "T_out": T_out,
+            "dt_stride": dt_stride,
+            "full_trajectory_mode": full_trajectory_mode,
+            "nan_to_zero": nan_to_zero,
+            "num_channels": num_channels,
         }
 
         if isinstance(dt_stride, list):
@@ -139,7 +145,6 @@ class PhysicsDataset(WellDataset):
 
         return x, y, self.labels, bcs
 
-
     def copy(self, overwrites: dict[str, Any] = {}) -> Optional["PhysicsDataset"]:
         """Copy the dataset with optional overwrites.
 
@@ -160,16 +165,15 @@ class PhysicsDataset(WellDataset):
         config.update(overwrites)
         return get_phys_dataset(
             data_dir=config["data_dir"],
-            n_steps_input=config["n_steps_input"],
-            n_steps_output=config["n_steps_output"],
             use_normalization=config["use_normalization"],
+            T_in=config["T_in"],
+            T_out=config["T_out"],
             dt_stride=config["dt_stride"],
             full_trajectory_mode=config["full_trajectory_mode"],
-            max_rollout_steps=config["max_rollout_steps"],
             nan_to_zero=config["nan_to_zero"],
-            flip_x=config["flip_x"],
-            flip_y=config["flip_y"],
+            num_channels=config["num_channels"],
         )
+
 
 class SuperDataset:
     """Wrapper around a list of datasets.
@@ -278,14 +282,15 @@ def get_dataset(
     use_normalization: bool = True,
     full_trajectory_mode: bool = False,
     nan_to_zero: bool = True,
-) -> SuperDataset:
+    return_super_dataset: bool = True,
+) -> SuperDataset | dict[str, PhysicsDataset]:
     """ """
 
     all_ds = {}
     for ds_name in datasets:
         ds_path = Path(path) / f"{ds_name}/data/{split_name}"
         if ds_path.exists():
-            dataset = PhysicsDataset(
+            dataset = get_phys_dataset(
                 data_dir=Path(path) / f"{ds_name}/data/{split_name}",
                 use_normalization=use_normalization,
                 T_in=T_in,
@@ -295,12 +300,16 @@ def get_dataset(
                 nan_to_zero=nan_to_zero,
                 num_channels=num_channels,
             )
-            all_ds[ds_name] = dataset
+            if dataset is not None:
+                all_ds[ds_name] = dataset
 
         else:
             print(f"Dataset path {ds_path} does not exist. Skipping.")
 
-    return SuperDataset(all_ds)
+    if not return_super_dataset:
+        return all_ds
+    else:
+        return SuperDataset(all_ds)
 
 
 def get_dataloader(
