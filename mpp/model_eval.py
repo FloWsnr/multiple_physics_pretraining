@@ -213,6 +213,7 @@ class Evaluator:
             T_out=config["T_out"],
             num_channels=config["num_channels"],
             return_super_dataset=False,
+            split_stride=True,
         )
 
         eval_dir = base_path / run_name

@@ -283,6 +283,7 @@ def get_dataset(
     full_trajectory_mode: bool = False,
     nan_to_zero: bool = True,
     return_super_dataset: bool = True,
+    split_stride: bool = False,
 ) -> SuperDataset | dict[str, PhysicsDataset]:
     """ """
 
@@ -290,18 +291,34 @@ def get_dataset(
     for ds_name in datasets:
         ds_path = Path(path) / f"{ds_name}/data/{split_name}"
         if ds_path.exists():
-            dataset = get_phys_dataset(
-                data_dir=Path(path) / f"{ds_name}/data/{split_name}",
-                use_normalization=use_normalization,
-                T_in=T_in,
-                T_out=T_out,
-                dt_stride=[min_stride, max_stride],
-                full_trajectory_mode=full_trajectory_mode,
-                nan_to_zero=nan_to_zero,
-                num_channels=num_channels,
-            )
-            if dataset is not None:
-                all_ds[ds_name] = dataset
+            if split_stride:
+                for stride in range(min_stride, max_stride + 1):
+                    name = f"{ds_name}_stride{stride}"
+                    dataset = get_phys_dataset(
+                        data_dir=Path(path) / f"{ds_name}/data/{split_name}",
+                        use_normalization=use_normalization,
+                        T_in=T_in,
+                        T_out=T_out,
+                        dt_stride=stride,
+                        full_trajectory_mode=full_trajectory_mode,
+                        nan_to_zero=nan_to_zero,
+                        num_channels=num_channels,
+                    )
+                    if dataset is not None:
+                        all_ds[name] = dataset
+            else:
+                dataset = get_phys_dataset(
+                    data_dir=Path(path) / f"{ds_name}/data/{split_name}",
+                    use_normalization=use_normalization,
+                    T_in=T_in,
+                    T_out=T_out,
+                    dt_stride=[min_stride, max_stride],
+                    full_trajectory_mode=full_trajectory_mode,
+                    nan_to_zero=nan_to_zero,
+                    num_channels=num_channels,
+                )
+                if dataset is not None:
+                    all_ds[ds_name] = dataset
 
         else:
             print(f"Dataset path {ds_path} does not exist. Skipping.")
