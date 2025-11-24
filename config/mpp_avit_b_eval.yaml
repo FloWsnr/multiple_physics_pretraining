@@ -1,0 +1,38 @@
+
+
+num_data_workers: 23 #
+batch_size: 192 # total across all gpus (4*48)
+n_input_steps: 4 # Length of history to include in input
+n_output_steps: 1 # Number of steps to predict
+
+# Big
+embed_dim: 768 # Dimension of internal representation - 192/384/768/1024 for Ti/S/B/L
+num_heads: 12 # Number of heads for attention - 3/6/12/16 for Ti/S/B/L
+processor_blocks: 12 # Number of transformer blocks in the backbone - 12/12/12/24 for Ti/S/B/L
+patch_size: [16, 16] # Actually currently hardcoded at 16
+bias_type: 'rel'  # Options rel, continuous, none
+
+
+n_states: 5   # Number of state variables across the datasets - Can be larger than real number and things will just go unused
+datasets:
+  - cylinder_sym_flow_water
+  - cylinder_pipe_flow_water
+  - object_periodic_flow_water
+  - object_sym_flow_water
+  - object_sym_flow_air
+
+  - heated_object_pipe_flow_air
+  - cooled_object_pipe_flow_air
+  - rayleigh_benard_obstacle
+
+  - twophase_flow
+
+  - rayleigh_benard
+  - shear_flow
+  - euler_multi_quadrants_periodicBC
+
+  # - turbulent_radiative_layer_2D
+
+min_stride: 1 # Minimum temporal stride when sampling data
+max_stride: 8 # Maximum temporal stride when sampling data
+seed: 42

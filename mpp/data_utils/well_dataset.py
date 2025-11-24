@@ -13,7 +13,34 @@ from torch.utils.data.distributed import DistributedSampler
 
 from einops import rearrange
 
-from gphyt.data.well_dataset import WellDataset, ZScoreNormalization
+from gphyt.data.well_dataset import WellDataset, ZScoreNormalization, StrideError
+
+
+def get_phys_dataset(
+    data_dir: Path,
+    use_normalization: bool = True,
+    T_in: int = 16,
+    T_out: int = 1,
+    dt_stride: int | list[int] = 1,
+    full_trajectory_mode: bool = False,
+    nan_to_zero: bool = True,
+    num_channels: int = 5,
+) -> Optional["PhysicsDataset"]:
+    """Helper function to create a PhysicsDataset."""
+    try:
+        return PhysicsDataset(
+            data_dir=data_dir,
+            use_normalization=use_normalization,
+            T_in=T_in,
+            T_out=T_out,
+            dt_stride=dt_stride,
+            full_trajectory_mode=full_trajectory_mode,
+            nan_to_zero=nan_to_zero,
+            num_channels=num_channels,
+        )
+    except StrideError as e:
+        print(f"Error creating PhysicsDataset for {data_dir}: {e}")
+        return None
 
 
 class PhysicsDataset(WellDataset):
@@ -58,6 +85,11 @@ class PhysicsDataset(WellDataset):
         nan_to_zero: bool = True,
         num_channels: int = 5,
     ):
+
+        self.config = {
+            "data_dir": data_dir,
+        }
+
         if isinstance(dt_stride, list):
             min_dt_stride = dt_stride[0]
             max_dt_stride = dt_stride[1]
@@ -107,6 +139,37 @@ class PhysicsDataset(WellDataset):
 
         return x, y, self.labels, bcs
 
+
+    def copy(self, overwrites: dict[str, Any] = {}) -> Optional["PhysicsDataset"]:
+        """Copy the dataset with optional overwrites.
+
+        Useful for creating a new dataset with slightly different parameters.
+
+        Parameters
+        ----------
+        overwrites : dict[str, Any]
+            Dictionary of overwrites for the config.
+
+        Returns
+        -------
+        PhysicsDataset
+            New PhysicsDataset with the updated config.
+            Returns None if the dataset could not be created due to too large stride.
+        """
+        config = self.config.copy()
+        config.update(overwrites)
+        return get_phys_dataset(
+            data_dir=config["data_dir"],
+            n_steps_input=config["n_steps_input"],
+            n_steps_output=config["n_steps_output"],
+            use_normalization=config["use_normalization"],
+            dt_stride=config["dt_stride"],
+            full_trajectory_mode=config["full_trajectory_mode"],
+            max_rollout_steps=config["max_rollout_steps"],
+            nan_to_zero=config["nan_to_zero"],
+            flip_x=config["flip_x"],
+            flip_y=config["flip_y"],
+        )
 
 class SuperDataset:
     """Wrapper around a list of datasets.
