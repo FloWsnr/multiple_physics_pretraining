@@ -29,8 +29,6 @@
 ############################# Setup #################################################
 #####################################################################################
 
-CUDA_VISIBLE_DEVICES=1
-
 # activate conda environment
 export CONDA_ROOT=$HOME/miniforge3
 source $CONDA_ROOT/etc/profile.d/conda.sh
@@ -77,7 +75,7 @@ sim_dir="${eval_dir}/${sim_name}"
 # create the sim_dir if it doesn't exist
 mkdir -p $sim_dir
 # Try to find config file in sim_dir
-config_file="${base_dir}/configs/eval_medium.yaml"
+config_file="${base_dir}/config/mpp_avit_b_eval.yaml"
 if [ ! -f "$config_file" ]; then
     echo "No config_eval.yaml file found in $config_file, aborting..."
     exit 1

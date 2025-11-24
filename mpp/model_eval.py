@@ -4,6 +4,7 @@ By: Florian Wiesner
 Date: 2025-05-01
 """
 
+from dataclasses import dataclass
 from pathlib import Path
 import platform
 import argparse
@@ -62,6 +63,21 @@ def load_config(path: Path) -> dict:
     with open(path, "r") as f:
         config = yaml.load(f, Loader=Loader)
     return config
+
+
+@dataclass
+class model_config:
+    block_type: str = "axial"
+    time_type: str = "attention"
+    space_type: str = "axial_attention"
+    tie_fields: bool = False
+    embed_dim: int = 768
+    num_heads: int = 12
+    processor_blocks: int = 12
+    patch_size: tuple = (16, 16)
+    bias_type: str = "rel"
+    gradient_checkpointing: bool = False
+    n_states: int = 5
 
 
 class Evaluator:
@@ -177,7 +193,8 @@ class Evaluator:
             if torch.cuda.is_available()
             else torch.device("cpu")
         )
-        model = build_avit(config)
+
+        model = build_avit(model_config())
         model.to(device)
 
         cp_path = base_path / f"{checkpoint_name}"
@@ -306,7 +323,7 @@ class Evaluator:
             with torch.autocast(
                 enabled=self.amp, device_type=self.device.type, dtype=torch.bfloat16
             ):
-                ar_steps = target.shape[1]  # num of timesteps
+                ar_steps = target.shape[0]  # num of timesteps
                 self.logger.debug(f"    Autoregressive steps: {ar_steps}")
                 output = torch.tensor(0.0, device=self.device)  # Initialize for linter
                 for _ar_step in range(ar_steps):
@@ -322,7 +339,7 @@ class Evaluator:
 
                 # Use the final step for evaluation
                 final_output = output
-                final_target = target[-1, ...]  # (1T, B, C, H, W)
+                final_target = target[-1:, ...]  # (1T, B, C, H, W)
 
             # rearrange to (B, T, H, W, C)
             final_output = rearrange(final_output, "t b c h w -> b t h w c")

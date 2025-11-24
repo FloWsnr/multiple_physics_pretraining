@@ -1,11 +1,18 @@
 
 
-num_data_workers: 23 #
-batch_size: 192 # total across all gpus (4*48)
-n_input_steps: 4 # Length of history to include in input
-n_output_steps: 1 # Number of steps to predict
+num_workers: 20 #
+batch_size: 64 # total across all gpus (4*48)
+T_in: 4 # Length of history to include in input
+T_out: 1 # Number of steps to predict
 num_channels: 5
 
+
+# Model settings
+model_type: 'avit' # Only option so far
+block_type: 'axial' # Which type of block to use - if axial, next two fields must be set to define axial ops
+time_type: 'attention' # Conditional on block type
+space_type: 'axial_attention' # Conditional on block type
+tie_fields: !!bool False # Whether to use 1 embedding per field per data
 # Big
 embed_dim: 768 # Dimension of internal representation - 192/384/768/1024 for Ti/S/B/L
 num_heads: 12 # Number of heads for attention - 3/6/12/16 for Ti/S/B/L
@@ -38,5 +45,5 @@ min_stride: 1 # Minimum temporal stride when sampling data
 max_stride: 8 # Maximum temporal stride when sampling data
 seed: 42
 
-compile: true
-amp: true
+compile: false
+amp: false
