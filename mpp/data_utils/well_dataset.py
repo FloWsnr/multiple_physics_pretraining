@@ -141,9 +141,9 @@ class PhysicsDataset(WellDataset):
         bcs = data["boundary_conditions"]
         bc_x = bcs[0, 0]
         bc_y = bcs[1, 1]
-        bcs = torch.tensor([bc_x, bc_y])
+        bcs = torch.tensor([bc_x, bc_y], dtype=torch.float32)
 
-        return x, y, self.labels, bcs
+        return x.float(), y.float(), self.labels, bcs
 
     def copy(self, overwrites: dict[str, Any] = {}) -> Optional["PhysicsDataset"]:
         """Copy the dataset with optional overwrites.
