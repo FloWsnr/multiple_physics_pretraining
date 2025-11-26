@@ -29,6 +29,8 @@
 ############################# Setup #################################################
 #####################################################################################
 
+# export CUDA_VISIBLE_DEVICES=1
+
 # activate conda environment
 export CONDA_ROOT=$HOME/miniforge3
 source $CONDA_ROOT/etc/profile.d/conda.sh
@@ -51,7 +53,7 @@ sim_name="mpp_04"
 # name of the checkpoint to use for evaluation.
 checkpoint_name="ckpt.tar_epoch20"
 # forcasts
-forecast="1 4 8 12 16 20 24"
+forecast="16 20 24"
 # subdir name
 sub_dir="eval/all_horizons"
 debug=false
@@ -108,4 +110,4 @@ fi
 $python_bin $python_exec $exec_args
 
 # move the output file to the sim_dir
-mv ${sim_dir}/slrm_logs/eval_${sim_name}_${SLURM_JOB_ID}.out $sim_dir
+mv ${eval_dir}/slrm_logs/eval_mpp_${SLURM_JOB_ID}.out $sim_dir

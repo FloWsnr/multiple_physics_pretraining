@@ -1,7 +1,7 @@
 
 
 num_workers: 20 #
-batch_size: 64 # total across all gpus (4*48)
+batch_size: 32 # total across all gpus (4*48)
 T_in: 4 # Length of history to include in input
 T_out: 1 # Number of steps to predict
 num_channels: 5

@@ -46,4 +46,4 @@ max_stride: 8 # Maximum temporal stride when sampling data
 seed: 42
 
 compile: false
-amp: false
+amp: true
