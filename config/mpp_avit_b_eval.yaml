@@ -20,6 +20,7 @@ processor_blocks: 12 # Number of transformer blocks in the backbone - 12/12/12/2
 patch_size: [16, 16] # Actually currently hardcoded at 16
 bias_type: 'rel'  # Options rel, continuous, none
 
+eval_fraction: 0.1 # Fraction of data to use for evaluation
 
 n_states: 5   # Number of state variables across the datasets - Can be larger than real number and things will just go unused
 datasets:

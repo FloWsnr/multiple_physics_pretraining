@@ -95,6 +95,8 @@ class Evaluator:
         Batch size for evaluation, by default 256
     num_workers : int, optional
         Number of workers for dataloader, by default 4
+    eval_fraction : float, optional
+        Fraction of data to use for evaluation, by default 1.0
     debug : bool, optional
         Enable debug mode, by default False
     """
@@ -106,6 +108,7 @@ class Evaluator:
         eval_dir: Path,
         batch_size: int = 1,
         num_workers: int = 0,
+        eval_fraction: float = 1.0,
         amp: bool = True,
         debug: bool = False,
     ):
@@ -132,6 +135,7 @@ class Evaluator:
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.amp = amp
+        self.eval_fraction = eval_fraction
 
         self.eval_criteria = {
             "NMSE": NMSELoss(dims=(1, 2, 3), return_scalar=False),
@@ -225,6 +229,7 @@ class Evaluator:
             eval_dir=eval_dir,
             batch_size=batch_size,
             num_workers=num_workers,
+            eval_fraction=config.get("eval_fraction", 1.0),
             amp=amp,
             debug=debug,
         )
@@ -261,19 +266,13 @@ class Evaluator:
 
         return model
 
-    def _get_dataloader(self, dataset: PhysicsDataset, is_distributed: bool = False):
-        if is_distributed:
-            sampler = DistributedSampler(dataset, shuffle=False)
-        else:
-            sampler = SequentialSampler(dataset)
-
+    def _get_dataloader(self, dataset: PhysicsDataset):
         return DataLoader(
             dataset,
             batch_size=self.batch_size,
-            shuffle=False,
+            shuffle=True,
             num_workers=self.num_workers,
             pin_memory=True,
-            sampler=sampler,
         )
 
     def _log_msg(self, msg: str):
@@ -306,7 +305,8 @@ class Evaluator:
 
     @torch.inference_mode()
     def _eval_on_dataset(self, dataset: PhysicsDataset) -> dict[str, torch.Tensor]:
-        loader = self._get_dataloader(dataset, is_distributed=self.ddp_enabled)
+        loader = self._get_dataloader(dataset)
+        num_batches = len(loader)
 
         all_losses = {name: [] for name in self.eval_criteria.keys()}
 
@@ -389,6 +389,9 @@ class Evaluator:
 
             if self.debug and i == 0:
                 self.logger.debug("Only do one batch in debug mode.")
+                break
+
+            if i >= int(num_batches * self.eval_fraction):
                 break
 
         # Concatenate all losses

@@ -53,7 +53,7 @@ sim_name="mpp_04"
 # name of the checkpoint to use for evaluation.
 checkpoint_name="ckpt.tar_epoch20"
 # forcasts
-forecast="16 20 24"
+forecast="12"
 # subdir name
 sub_dir="eval/all_horizons"
 debug=false
